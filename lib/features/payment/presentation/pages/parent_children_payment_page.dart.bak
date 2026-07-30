@@ -1,0 +1,222 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/utils/currency_formatter.dart';
+import '../../../../design_system/components/stela_card.dart';
+import '../../../../design_system/tokens/stela_colors.dart';
+import '../../../../design_system/tokens/stela_spacing.dart';
+import '../../application/payment_controller.dart';
+import '../../domain/payment_models.dart';
+import '../widgets/payment_cart_bar.dart';
+import '../widgets/payment_item_selectable_card.dart';
+
+class ParentChildrenPaymentPage extends ConsumerWidget {
+  const ParentChildrenPaymentPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(paymentControllerProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Pembayaran'), centerTitle: false),
+      body: state.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : state.errorMessage != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(StelaSpacing.lg),
+                child: Text(state.errorMessage!, textAlign: TextAlign.center),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(StelaSpacing.md),
+              children: [
+                Text(
+                  'Pilih tagihan anak',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Pilih tagihan dari satu atau beberapa anak untuk dibundel.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: StelaColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: StelaSpacing.lg),
+                for (final child in state.children) ...[
+                  _ChildPaymentAccordion(child: child, state: state),
+                  const SizedBox(height: StelaSpacing.md),
+                ],
+              ],
+            ),
+      bottomNavigationBar: state.selectedItems.isEmpty
+          ? null
+          : PaymentCartBar(
+              items: state.selectedItems,
+              onTap: () => _showCart(context, ref),
+            ),
+    );
+  }
+
+  void _showCart(BuildContext context, WidgetRef ref) {
+    final state = ref.read(paymentControllerProvider);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(StelaSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Keranjang pembayaran',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: StelaSpacing.sm),
+            const Text('Ringkasan tagihan yang dipilih'),
+            const SizedBox(height: StelaSpacing.md),
+            for (final item in state.selectedItems)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(item.title),
+                subtitle: Text(
+                  '${_childName(state, item.serial)} - ${item.periode}',
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => ref
+                      .read(paymentControllerProvider.notifier)
+                      .removeItem(item),
+                ),
+              ),
+            const Divider(),
+            Text(
+              'Subtotal ${CurrencyFormatter.rupiah(state.subtotal)}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: StelaSpacing.md),
+            const Text(
+              'Pembayaran dan biaya admin ditampilkan setelah pratinjau invoice.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _childName(PaymentState state, String serial) {
+    for (final child in state.children) {
+      if (child.serial == serial) return child.name;
+    }
+    return 'Anak';
+  }
+}
+
+class _ChildPaymentAccordion extends ConsumerWidget {
+  const _ChildPaymentAccordion({required this.child, required this.state});
+  final ChildPaymentProfile child;
+  final PaymentState state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final expanded = state.expandedChildSerial == child.serial;
+    return StelaCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          ListTile(
+            onTap: () => ref
+                .read(paymentControllerProvider.notifier)
+                .toggleChild(child.serial),
+            leading: CircleAvatar(child: Text(child.name.substring(0, 1))),
+            title: Text(
+              child.name,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            subtitle: Text('${child.schoolName} • ${child.className}'),
+            trailing: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                StelaSpacing.md,
+                0,
+                StelaSpacing.md,
+                StelaSpacing.md,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(),
+                  Text(
+                    child.periodLabel,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Kelas ${child.className}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: StelaColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: StelaSpacing.md),
+                  _PaymentTypeSection(
+                    label: 'SPP',
+                    items: child.items
+                        .where(
+                          (item) => item.jenisPembayaran == PaymentType.spp,
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: StelaSpacing.md),
+                  _PaymentTypeSection(
+                    label: 'Pembayaran Lainnya',
+                    items: child.items
+                        .where(
+                          (item) => item.jenisPembayaran == PaymentType.other,
+                        )
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentTypeSection extends ConsumerWidget {
+  const _PaymentTypeSection({required this.label, required this.items});
+  final String label;
+  final List<PaymentItem> items;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(paymentControllerProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        for (final item in items) ...[
+          PaymentItemSelectableCard(
+            item: item,
+            isSelected: state.selectedItems.any(
+              (selected) => selected.selectionKey == item.selectionKey,
+            ),
+            onTap: item.isSelectable
+                ? () => _selectItem(context, ref, item)
+                : null,
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  void _selectItem(BuildContext context, WidgetRef ref, PaymentItem item) {
+    final controller = ref.read(paymentControllerProvider.notifier);
+    controller.toggleItem(item);
+  }
+}

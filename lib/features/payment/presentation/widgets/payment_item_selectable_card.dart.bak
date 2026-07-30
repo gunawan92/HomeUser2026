@@ -1,0 +1,73 @@
+import 'package:flutter/material.dart';
+
+import '../../../../core/utils/currency_formatter.dart';
+import '../../../../design_system/tokens/stela_colors.dart';
+import '../../../../design_system/tokens/stela_radius.dart';
+import '../../../../design_system/tokens/stela_spacing.dart';
+import '../../domain/payment_models.dart';
+import 'payment_status_chip.dart';
+
+class PaymentItemSelectableCard extends StatelessWidget {
+  const PaymentItemSelectableCard({
+    super.key,
+    required this.item,
+    required this.isSelected,
+    required this.onTap,
+  });
+  final PaymentItem item;
+  final bool isSelected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: item.isSelectable ? StelaColors.surface : StelaColors.warmBackground,
+    borderRadius: BorderRadius.circular(StelaRadius.md),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(StelaRadius.md),
+      child: Container(
+        padding: const EdgeInsets.all(StelaSpacing.md),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(StelaRadius.md),
+          border: Border.all(
+            color: isSelected ? StelaColors.primaryRed : StelaColors.border,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            if (item.isSelectable)
+              Checkbox(value: isSelected, onChanged: (_) => onTap?.call()),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (item.description != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      item.description!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  PaymentStatusChip(status: item.status),
+                ],
+              ),
+            ),
+            const SizedBox(width: StelaSpacing.sm),
+            Text(
+              CurrencyFormatter.rupiah(item.amount),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: StelaColors.primaryRed),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
