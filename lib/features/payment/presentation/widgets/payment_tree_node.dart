@@ -15,6 +15,7 @@ class PaymentTreeNode extends StatelessWidget {
     this.subtitle,
     this.leading,
     this.trailing,
+    this.headerColor,
   });
 
   final int level;
@@ -22,6 +23,7 @@ class PaymentTreeNode extends StatelessWidget {
   final String? subtitle;
   final Widget? leading;
   final Widget? trailing;
+  final Color? headerColor;
   final bool expanded;
   final VoidCallback onPressed;
   final Widget child;
@@ -71,8 +73,12 @@ class PaymentTreeNode extends StatelessWidget {
                   child: InkWell(
                     onTap: onPressed,
                     borderRadius: BorderRadius.circular(StelaRadius.md),
-                    child: Padding(
+                    child: Container(
                       padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: headerColor,
+                        borderRadius: BorderRadius.circular(StelaRadius.md),
+                      ),
                       child: Row(
                         children: [
                           if (leading case final nodeLeading?) ...[
@@ -85,9 +91,12 @@ class PaymentTreeNode extends StatelessWidget {
                               children: [
                                 Text(
                                   title,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        color: headerColor == null
+                                            ? null
+                                            : Colors.white,
+                                      ),
                                 ),
                                 if (subtitle != null) ...[
                                   const SizedBox(height: 3),
@@ -95,7 +104,9 @@ class PaymentTreeNode extends StatelessWidget {
                                     subtitle!,
                                     style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(
-                                          color: StelaColors.textSecondary,
+                                          color: headerColor == null
+                                              ? StelaColors.textSecondary
+                                              : Colors.white70,
                                         ),
                                   ),
                                 ],

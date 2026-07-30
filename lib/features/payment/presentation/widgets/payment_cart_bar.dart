@@ -33,34 +33,14 @@ class PaymentStickyCheckoutBar extends StatelessWidget {
             border: Border(top: BorderSide(color: StelaColors.border)),
             boxShadow: [StelaShadows.card],
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) => constraints.maxWidth < 360
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      PaymentSelectionSummary(items: items, total: total),
-                      const SizedBox(height: StelaSpacing.sm),
-                      _ContinueButton(
-                        onPressed: onContinue,
-                        isLoading: isLoading,
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: PaymentSelectionSummary(
-                          items: items,
-                          total: total,
-                        ),
-                      ),
-                      const SizedBox(width: StelaSpacing.md),
-                      _ContinueButton(
-                        onPressed: onContinue,
-                        isLoading: isLoading,
-                      ),
-                    ],
-                  ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PaymentSelectionSummary(items: items, total: total),
+              const SizedBox(height: StelaSpacing.sm),
+              _ContinueButton(onPressed: onContinue, isLoading: isLoading),
+            ],
           ),
         ),
       ),
@@ -110,7 +90,7 @@ class _ContinueButton extends StatelessWidget {
   Widget build(BuildContext context) => FilledButton(
     onPressed: isLoading ? null : onPressed,
     style: FilledButton.styleFrom(
-      minimumSize: const Size(132, 50),
+      minimumSize: const Size.fromHeight(52),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(StelaRadius.md),
       ),
@@ -122,6 +102,6 @@ class _ContinueButton extends StatelessWidget {
             height: 20,
             child: CircularProgressIndicator(strokeWidth: 2),
           )
-        : const Text('Lihat Ringkasan'),
+        : const Text('Lanjutkan'),
   );
 }

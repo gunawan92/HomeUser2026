@@ -4,6 +4,7 @@ import '../../authentication/application/auth_controller.dart';
 import '../data/api_payment_repository.dart';
 import '../data/cart_repository.dart';
 import '../domain/cart_preview.dart';
+import '../domain/checkout_result.dart';
 import '../domain/payment_models.dart';
 import '../domain/payment_repository.dart';
 
@@ -36,6 +37,9 @@ class PaymentState {
     this.cartPreview,
     this.cartErrorMessage,
     this.isCheckingOut = false,
+    this.checkoutResult,
+    this.isRequestingPayment = false,
+    this.paymentAttempt,
   });
 
   final List<ChildPaymentProfile> children;
@@ -48,6 +52,9 @@ class PaymentState {
   final CartPreview? cartPreview;
   final String? cartErrorMessage;
   final bool isCheckingOut;
+  final CheckoutResult? checkoutResult;
+  final bool isRequestingPayment;
+  final PaymentAttempt? paymentAttempt;
 
   int get subtotal => selectedItems.fold(0, (sum, item) => sum + item.amount);
 
@@ -64,6 +71,9 @@ class PaymentState {
     bool clearCartPreview = false,
     String? cartErrorMessage,
     bool? isCheckingOut,
+    CheckoutResult? checkoutResult,
+    bool? isRequestingPayment,
+    PaymentAttempt? paymentAttempt,
   }) => PaymentState(
     children: children ?? this.children,
     selectedItems: selectedItems ?? this.selectedItems,
@@ -77,6 +87,9 @@ class PaymentState {
     cartPreview: clearCartPreview ? null : cartPreview ?? this.cartPreview,
     cartErrorMessage: cartErrorMessage,
     isCheckingOut: isCheckingOut ?? this.isCheckingOut,
+    checkoutResult: checkoutResult ?? this.checkoutResult,
+    isRequestingPayment: isRequestingPayment ?? this.isRequestingPayment,
+    paymentAttempt: paymentAttempt ?? this.paymentAttempt,
   );
 }
 
@@ -172,17 +185,52 @@ class PaymentController extends Notifier<PaymentState> {
     }
     state = state.copyWith(isCheckingOut: true, cartErrorMessage: null);
     try {
-      await ref
+      final result = await ref
           .read(cartRepositoryProvider)
           .checkoutCart(
             cartReference: preview.cartReference,
             parentReference: session.parentReference,
           );
-      state = state.copyWith(isCheckingOut: false);
+      state = state.copyWith(isCheckingOut: false, checkoutResult: result);
       return true;
     } catch (error) {
       state = state.copyWith(
         isCheckingOut: false,
+        cartErrorMessage: error.toString(),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> createPayment(PaymentOption option) async {
+    final checkout = state.checkoutResult;
+    if (checkout == null) {
+      state = state.copyWith(cartErrorMessage: 'Checkout belum tersedia.');
+      return false;
+    }
+    if (!option.enabled) {
+      state = state.copyWith(
+        cartErrorMessage:
+            option.disabledReason ?? 'Kanal pembayaran tidak tersedia.',
+      );
+      return false;
+    }
+    state = state.copyWith(isRequestingPayment: true, cartErrorMessage: null);
+    try {
+      final attempt = await ref
+          .read(cartRepositoryProvider)
+          .createPayment(
+            transidmerchant: checkout.transidmerchant,
+            option: option,
+          );
+      state = state.copyWith(
+        isRequestingPayment: false,
+        paymentAttempt: attempt,
+      );
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isRequestingPayment: false,
         cartErrorMessage: error.toString(),
       );
       return false;

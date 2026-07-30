@@ -9,6 +9,7 @@ import '../../domain/payment_models.dart';
 import '../widgets/payment_cart_bar.dart';
 import '../widgets/payment_item_selectable_card.dart';
 import '../widgets/payment_tree_node.dart';
+import 'checkout_invoice_page.dart';
 
 class ParentChildrenPaymentPage extends ConsumerWidget {
   const ParentChildrenPaymentPage({super.key});
@@ -18,12 +19,12 @@ class ParentChildrenPaymentPage extends ConsumerWidget {
     final state = ref.watch(paymentControllerProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Pembayaran')),
-      bottomSheet: state.selectedItems.isEmpty
+      bottomNavigationBar: state.selectedItems.isEmpty
           ? null
           : PaymentStickyCheckoutBar(
               items: state.selectedItems,
               isLoading: state.isPreparingCart,
-              onContinue: () => _showSummary(context, ref),
+              onContinue: () => _continueWithCart(context, ref),
             ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -34,12 +35,7 @@ class ParentChildrenPaymentPage extends ConsumerWidget {
                   ref.read(paymentControllerProvider.notifier).load(),
             )
           : ListView(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                16,
-                16,
-                state.selectedItems.isEmpty ? 16 : 132,
-              ),
+              padding: const EdgeInsets.all(StelaSpacing.md),
               children: [
                 Text(
                   'Pilih tagihan anak',
@@ -47,7 +43,7 @@ class ParentChildrenPaymentPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Pilih beberapa tagihan sebelum melihat ringkasan.',
+                  'Pilih tagihan yang ingin dibayar.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: StelaColors.textSecondary,
                   ),
@@ -60,60 +56,81 @@ class ParentChildrenPaymentPage extends ConsumerWidget {
     );
   }
 
-  void _showSummary(BuildContext context, WidgetRef ref) {
+  Future<void> _continueWithCart(BuildContext context, WidgetRef ref) async {
+    await ref.read(paymentControllerProvider.notifier).prepareCart();
+    if (!context.mounted) return;
+    final next = ref.read(paymentControllerProvider);
+    if (next.cartPreview == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(next.cartErrorMessage ?? 'Cart belum tersedia.'),
+        ),
+      );
+      return;
+    }
+    _showServerCart(context, ref);
+  }
+
+  void _showServerCart(BuildContext context, WidgetRef ref) {
     final state = ref.read(paymentControllerProvider);
+    final cart = state.cartPreview!;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         top: false,
-        child: SingleChildScrollView(
+        child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Ringkasan pilihan',
+                'Keranjang siap',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
-              for (final item in state.selectedItems)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(item.title),
-                  subtitle: Text(item.periode),
-                  trailing: Text(CurrencyFormatter.rupiah(item.amount)),
-                ),
-              const Divider(),
               Text(
-                'Subtotal ${CurrencyFormatter.rupiah(state.subtotal)}',
-                style: Theme.of(context).textTheme.titleMedium,
+                '${state.selectedItems.length} Tagihan siap untuk dibayar ya ibu/bapak.',
               ),
               const SizedBox(height: 16),
+              Text(
+                'Total ${CurrencyFormatter.rupiah(cart.grandTotal)}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () async {
-                    Navigator.pop(sheetContext);
                     await ref
                         .read(paymentControllerProvider.notifier)
-                        .prepareCart();
+                        .checkoutCart();
                     if (!context.mounted) return;
                     final next = ref.read(paymentControllerProvider);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          next.cartErrorMessage ??
-                              (next.cartPreview == null
-                                  ? 'Cart belum tersedia.'
-                                  : 'Cart server berhasil dibuat.'),
+                    if (next.checkoutResult == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            next.cartErrorMessage ?? 'Checkout belum berhasil.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CheckoutInvoicePage(
+                          checkout: next.checkoutResult!,
+                          cart: cart,
+                          items: next.selectedItems,
                         ),
                       ),
                     );
                   },
-                  child: const Text('Buat Keranjang'),
+                  child: const Text('Lanjut Checkout'),
                 ),
               ),
             ],
@@ -145,39 +162,60 @@ class _StudentPaymentNode extends ConsumerWidget {
       onPressed: () => ref
           .read(paymentControllerProvider.notifier)
           .toggleChild(child.serial),
-      child: PaymentTreeNode(
-        level: 1,
-        title: child.periodLabel,
-        subtitle: '${child.availableCount} tagihan tersedia',
-        leading: const Icon(Icons.calendar_month_outlined),
-        expanded: true,
-        onPressed: () {},
-        child: PaymentTreeNode(
-          level: 2,
-          title: 'Kelas ${child.className}',
-          leading: const Icon(Icons.school_outlined),
-          expanded: true,
-          onPressed: () {},
-          child: Column(
-            children: [
-              _CategoryNode(
-                childSerial: child.serial,
-                title: 'Pembayaran SPP',
-                type: PaymentType.spp,
-                items: child.items
-                    .where((item) => item.jenisPembayaran == PaymentType.spp)
-                    .toList(),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 12, top: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.calendar_month_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  child.periodLabel,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '• ${child.availableCount} tagihan',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: StelaColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.school_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Kelas ${child.className}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ),
-              _CategoryNode(
-                childSerial: child.serial,
-                title: 'Pembayaran Lainnya',
-                type: PaymentType.other,
-                items: child.items
-                    .where((item) => item.jenisPembayaran == PaymentType.other)
-                    .toList(),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            _CategoryNode(
+              childSerial: child.serial,
+              title: 'Pembayaran SPP',
+              type: PaymentType.spp,
+              items: child.items
+                  .where((item) => item.jenisPembayaran == PaymentType.spp)
+                  .toList(),
+            ),
+            _CategoryNode(
+              childSerial: child.serial,
+              title: 'Pembayaran Lainnya',
+              type: PaymentType.other,
+              items: child.items
+                  .where((item) => item.jenisPembayaran == PaymentType.other)
+                  .toList(),
+            ),
+          ],
         ),
       ),
     );
@@ -202,7 +240,7 @@ class _CategoryNode extends ConsumerWidget {
     final key = '$childSerial-${type.name}';
     final open = state.expandedCategoryKeys.contains(key);
     return PaymentTreeNode(
-      level: 3,
+      level: 1,
       title: title,
       subtitle: '${items.length} tagihan',
       leading: Icon(
@@ -210,6 +248,7 @@ class _CategoryNode extends ConsumerWidget {
             ? Icons.receipt_long_outlined
             : Icons.account_balance_wallet_outlined,
       ),
+      headerColor: type == PaymentType.spp ? StelaColors.primaryRed : null,
       expanded: open,
       onPressed: () =>
           ref.read(paymentControllerProvider.notifier).toggleCategory(key),
