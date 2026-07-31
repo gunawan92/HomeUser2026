@@ -187,10 +187,7 @@ class PaymentController extends Notifier<PaymentState> {
     try {
       final result = await ref
           .read(cartRepositoryProvider)
-          .checkoutCart(
-            cartReference: preview.cartReference,
-            parentReference: session.parentReference,
-          );
+          .checkoutCart(cartReference: preview.cartReference);
       state = state.copyWith(isCheckingOut: false, checkoutResult: result);
       return true;
     } catch (error) {

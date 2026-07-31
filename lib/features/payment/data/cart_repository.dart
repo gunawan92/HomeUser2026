@@ -15,23 +15,22 @@ class CartRepository {
   }) async {
     final cartResponse = await _apiClient.dio.post<Object>(
       '/api/v1/carts',
-      data: FormData.fromMap({'parent_reference': parentReference}),
+      data: {'parent_reference': parentReference},
     );
     final cart = _map(cartResponse.data, 'POST /api/v1/carts');
     final cartReference = _requiredText(cart, 'cart_reference');
     for (final item in items) {
       await _apiClient.dio.post<Object>(
         '/api/v1/carts/$cartReference/items',
-        data: FormData.fromMap({
+        data: {
           'parent_reference': parentReference,
           'student_reference': item.serial,
           'source_reference': item.referenceTambahan!,
-        }),
+        },
       );
     }
     final summaryResponse = await _apiClient.dio.get<Object>(
       '/api/v1/carts/$cartReference/summary',
-      queryParameters: {'parent_reference': parentReference},
     );
     final summary = _map(
       summaryResponse.data,
@@ -45,13 +44,9 @@ class CartRepository {
     );
   }
 
-  Future<CheckoutResult> checkoutCart({
-    required String cartReference,
-    required String parentReference,
-  }) async {
+  Future<CheckoutResult> checkoutCart({required String cartReference}) async {
     final checkoutResponse = await _apiClient.dio.post<Object>(
       '/api/v1/carts/$cartReference/checkout',
-      data: FormData.fromMap({'parent_reference': parentReference}),
     );
     final checkout = _map(
       checkoutResponse.data,

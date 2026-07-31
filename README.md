@@ -21,18 +21,15 @@ flutter test
 flutter run -d <android-device-id>
 ```
 
-The development API base URL is `http://192.168.1.71:8081`. Android cleartext
-HTTP is enabled for this LAN-only development environment; production must use
-HTTPS. Login uses `/token_create` and `/profil_user` and stores the session in
-Secure Storage.
+The staging API base URL is `https://dev.stela.id`. All Flutter API traffic
+uses HTTPS. Login uses `/token_create` and `/profil_user`; `profile.serial` is
+stored as the parent reference in Secure Storage.
 
 ## Current product surface
 
 - Login UI and STELA landing page are available for visual review.
-- Payment V2 loads children and bills from the development API after login and
-  supports bundled child drafts.
-- Backend calls, provider payment, and non-payment feature modules are not yet
-  implemented.
+- Payment V1 loads children, bills, cart, checkout, channel options, and
+  payment instructions from the staging API after login.
 
 See [documentation](docs/) for architectural decisions, API flow, and product
 scope.

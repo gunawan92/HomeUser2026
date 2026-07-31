@@ -2,12 +2,12 @@
 
 ## Status
 
-Implemented against the development API. Credentials are sent only when the
+Implemented against the staging API. Credentials are sent only when the
 user submits the login form and the resulting session is persisted securely.
 
 ## Approved legacy-compatible flow for implementation
 
-Base URL in LAN development: `http://192.168.1.71:8081`.
+Base URL: `https://dev.stela.id`.
 
 1. `POST /token_create` with `user_name`, `password`, `remember=1`, and
    `app_name=SNM`.
