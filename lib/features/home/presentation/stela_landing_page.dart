@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../design_system/components/stela_card.dart';
 import '../../../design_system/tokens/stela_colors.dart';
 import '../../../design_system/tokens/stela_radius.dart';
 import '../../../design_system/tokens/stela_spacing.dart';
+import '../../authentication/application/auth_controller.dart';
 
-class StelaLandingPage extends StatelessWidget {
+class StelaLandingPage extends ConsumerWidget {
   const StelaLandingPage({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
     body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(StelaSpacing.md),
@@ -24,8 +26,9 @@ class StelaLandingPage extends StatelessWidget {
                 icon: const Icon(Icons.notifications_none_outlined),
               ),
               IconButton(
-                onPressed: () => context.go('/login'),
-                icon: const Icon(Icons.account_circle_outlined),
+                tooltip: 'Keluar',
+                onPressed: () => _confirmSignOut(context, ref),
+                icon: const Icon(Icons.logout_rounded),
               ),
             ],
           ),
@@ -63,6 +66,31 @@ class StelaLandingPage extends StatelessWidget {
       ),
     ),
   );
+
+  Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Keluar dari akun?'),
+        content: const Text(
+          'Anda perlu masuk kembali untuk mengakses pembayaran.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await ref.read(authControllerProvider.notifier).signOut();
+    if (context.mounted) context.go('/login');
+  }
 }
 
 class _Banner extends StatelessWidget {

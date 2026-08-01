@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
 import '../../authentication/application/auth_controller.dart';
 import '../data/api_payment_repository.dart';
@@ -40,6 +41,9 @@ class PaymentState {
     this.checkoutResult,
     this.isRequestingPayment = false,
     this.paymentAttempt,
+    this.paymentStatus = CheckoutPaymentStatus.pending,
+    this.isPollingStatus = false,
+    this.paidAt,
   });
 
   final List<ChildPaymentProfile> children;
@@ -55,6 +59,9 @@ class PaymentState {
   final CheckoutResult? checkoutResult;
   final bool isRequestingPayment;
   final PaymentAttempt? paymentAttempt;
+  final CheckoutPaymentStatus paymentStatus;
+  final bool isPollingStatus;
+  final String? paidAt;
 
   int get subtotal => selectedItems.fold(0, (sum, item) => sum + item.amount);
 
@@ -74,6 +81,9 @@ class PaymentState {
     CheckoutResult? checkoutResult,
     bool? isRequestingPayment,
     PaymentAttempt? paymentAttempt,
+    CheckoutPaymentStatus? paymentStatus,
+    bool? isPollingStatus,
+    String? paidAt,
   }) => PaymentState(
     children: children ?? this.children,
     selectedItems: selectedItems ?? this.selectedItems,
@@ -90,6 +100,9 @@ class PaymentState {
     checkoutResult: checkoutResult ?? this.checkoutResult,
     isRequestingPayment: isRequestingPayment ?? this.isRequestingPayment,
     paymentAttempt: paymentAttempt ?? this.paymentAttempt,
+    paymentStatus: paymentStatus ?? this.paymentStatus,
+    isPollingStatus: isPollingStatus ?? this.isPollingStatus,
+    paidAt: paidAt ?? this.paidAt,
   );
 }
 
@@ -107,7 +120,10 @@ class PaymentController extends Notifier<PaymentState> {
           .getChildrenPayments();
       state = state.copyWith(children: children, isLoading: false);
     } catch (error) {
-      state = state.copyWith(isLoading: false, errorMessage: error.toString());
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: _userFacingError(error),
+      );
     }
   }
 
@@ -116,10 +132,60 @@ class PaymentController extends Notifier<PaymentState> {
     clearExpandedChild: state.expandedChildSerial == serial,
   );
 
-  void toggleItem(PaymentItem item) {
+  String? validateAndToggleItem(PaymentItem item) {
     final alreadySelected = state.selectedItems.any(
       (selected) => selected.selectionKey == item.selectionKey,
     );
+
+    if (item.jenisPembayaran == PaymentType.spp) {
+      final childProfile = state.children.firstWhere(
+        (c) => c.serial == item.serial,
+        orElse: () => ChildPaymentProfile(
+          idschool: '',
+          serial: '',
+          name: '',
+          schoolName: '',
+          periodLabel: '',
+          periodReference: '',
+          className: '',
+          idclass: '',
+          items: const [],
+        ),
+      );
+
+      final availableSppItems = childProfile.items
+          .where((i) => i.jenisPembayaran == PaymentType.spp && i.isSelectable)
+          .toList();
+
+      final itemIndex = availableSppItems.indexWhere(
+        (i) => i.selectionKey == item.selectionKey,
+      );
+
+      if (!alreadySelected && itemIndex > 0) {
+        for (int i = 0; i < itemIndex; i++) {
+          final earlier = availableSppItems[i];
+          final earlierSelected = state.selectedItems.any(
+            (s) => s.selectionKey == earlier.selectionKey,
+          );
+          if (!earlierSelected) {
+            return 'Pembayaran SPP lebih dari 1 bulan harus berurutan. Silakan pilih tagihan bulan sebelumnya (${earlier.title}) terlebih dahulu.';
+          }
+        }
+      } else if (alreadySelected && itemIndex >= 0) {
+        final selectedKeysToRemove = <String>{item.selectionKey};
+        for (int i = itemIndex + 1; i < availableSppItems.length; i++) {
+          selectedKeysToRemove.add(availableSppItems[i].selectionKey);
+        }
+        state = state.copyWith(
+          clearCartPreview: true,
+          selectedItems: state.selectedItems
+              .where((s) => !selectedKeysToRemove.contains(s.selectionKey))
+              .toList(growable: false),
+        );
+        return null;
+      }
+    }
+
     state = state.copyWith(
       clearCartPreview: true,
       selectedItems: alreadySelected
@@ -128,6 +194,11 @@ class PaymentController extends Notifier<PaymentState> {
                 .toList(growable: false)
           : [...state.selectedItems, item],
     );
+    return null;
+  }
+
+  void toggleItem(PaymentItem item) {
+    validateAndToggleItem(item);
   }
 
   void toggleCategory(String key) {
@@ -169,7 +240,7 @@ class PaymentController extends Notifier<PaymentState> {
     } catch (error) {
       state = state.copyWith(
         isPreparingCart: false,
-        cartErrorMessage: error.toString(),
+        cartErrorMessage: _userFacingError(error),
       );
     }
   }
@@ -187,13 +258,16 @@ class PaymentController extends Notifier<PaymentState> {
     try {
       final result = await ref
           .read(cartRepositoryProvider)
-          .checkoutCart(cartReference: preview.cartReference);
+          .checkoutCart(
+            cartReference: preview.cartReference,
+            parentReference: session.parentReference,
+          );
       state = state.copyWith(isCheckingOut: false, checkoutResult: result);
       return true;
     } catch (error) {
       state = state.copyWith(
         isCheckingOut: false,
-        cartErrorMessage: error.toString(),
+        cartErrorMessage: _userFacingError(error),
       );
       return false;
     }
@@ -223,14 +297,82 @@ class PaymentController extends Notifier<PaymentState> {
       state = state.copyWith(
         isRequestingPayment: false,
         paymentAttempt: attempt,
+        paymentStatus: CheckoutPaymentStatus.paymentRequested,
       );
       return true;
     } catch (error) {
       state = state.copyWith(
         isRequestingPayment: false,
-        cartErrorMessage: error.toString(),
+        cartErrorMessage: _userFacingError(error),
       );
       return false;
     }
+  }
+
+  Future<CheckoutPaymentStatus> checkPaymentStatus(String transidmerchant) async {
+    state = state.copyWith(isPollingStatus: true);
+    try {
+      final summary = await ref
+          .read(cartRepositoryProvider)
+          .getCheckoutSummary(transidmerchant);
+      final newStatus = summary.paymentStatus;
+      final attempt = state.paymentAttempt?.copyWithStatus(
+        paymentStatus: newStatus,
+        callbackReceived: summary.callbackReceived,
+        paidAt: summary.paidAt,
+      );
+      final updatedCheckout = state.checkoutResult == null
+          ? null
+          : CheckoutResult(
+              transidmerchant: summary.transidmerchant,
+              transidstela: summary.transidstela,
+              subtotal: summary.subtotal,
+              adminFee: summary.adminFee,
+              grandTotal: summary.grandTotal,
+              paymentOptions: summary.paymentOptions,
+              paymentStatus: newStatus,
+              callbackReceived: summary.callbackReceived,
+              paidAt: summary.paidAt,
+            );
+      state = state.copyWith(
+        isPollingStatus: false,
+        checkoutResult: updatedCheckout,
+        paymentAttempt: attempt,
+        paymentStatus: newStatus,
+        paidAt: summary.paidAt,
+      );
+      if (newStatus == CheckoutPaymentStatus.paid) {
+        // Auto-refresh children bills so paid items are updated to status: PAID
+        await load();
+        state = state.copyWith(selectedItems: const []);
+      }
+      return newStatus;
+    } catch (_) {
+      state = state.copyWith(isPollingStatus: false);
+      return state.paymentStatus;
+    }
+  }
+
+  String _userFacingError(Object error) {
+    if (error is DioException) {
+      final response = error.response;
+      final data = response?.data;
+      if (data is Map) {
+        final message = data['message'] ?? data['error'] ?? data['errors'];
+        final text = message?.toString().trim();
+        if (text != null && text.isNotEmpty) return text;
+      }
+      return switch (response?.statusCode) {
+        400 =>
+          'Data pembayaran belum dapat diproses. Periksa tagihan lalu coba lagi.',
+        401 || 403 => 'Sesi Anda telah berakhir. Silakan masuk kembali.',
+        404 => 'Data pembayaran tidak ditemukan.',
+        409 =>
+          'Data pembayaran sedang diproses. Silakan buka kembali instruksinya.',
+        _ =>
+          'Layanan pembayaran sedang tidak dapat dihubungi. Coba lagi nanti.',
+      };
+    }
+    return error.toString();
   }
 }

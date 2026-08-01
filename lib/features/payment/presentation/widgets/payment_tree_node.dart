@@ -33,7 +33,7 @@ class PaymentTreeNode extends StatelessWidget {
     final motion = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 280);
-    final indent = (level * 12.0).clamp(0, 36).toDouble();
+    final indent = (level * 4.0).clamp(0, 12).toDouble();
     return Padding(
       padding: EdgeInsets.only(left: indent, bottom: StelaSpacing.sm),
       child: Stack(
@@ -49,7 +49,7 @@ class PaymentTreeNode extends StatelessWidget {
             Positioned(
               left: 0,
               top: 30,
-              child: Container(width: 10, height: 1, color: StelaColors.border),
+              child: Container(width: 6, height: 1, color: StelaColors.border),
             ),
           AnimatedContainer(
             duration: motion,
@@ -74,7 +74,7 @@ class PaymentTreeNode extends StatelessWidget {
                     onTap: onPressed,
                     borderRadius: BorderRadius.circular(StelaRadius.md),
                     child: Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                       decoration: BoxDecoration(
                         color: headerColor,
                         borderRadius: BorderRadius.circular(StelaRadius.md),
@@ -132,7 +132,7 @@ class PaymentTreeNode extends StatelessWidget {
                     curve: Curves.easeOutCubic,
                     child: expanded
                         ? Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                            padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
                             child: child,
                           )
                         : const SizedBox.shrink(),

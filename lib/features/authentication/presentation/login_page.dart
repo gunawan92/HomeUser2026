@@ -110,7 +110,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 borderRadius: BorderRadius.circular(StelaRadius.md),
               ),
               child: Text(
-                'Terhubung ke server pengembangan STELA melalui jaringan lokal.',
+                'Terhubung aman ke server staging STELA.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

@@ -1,3 +1,32 @@
+enum CheckoutPaymentStatus {
+  pending,
+  paymentRequested,
+  paid,
+  failed,
+  expired,
+  cancelled;
+
+  static CheckoutPaymentStatus parse(String? value) {
+    final normalized = value?.trim().toUpperCase();
+    return switch (normalized) {
+      'PAID' => CheckoutPaymentStatus.paid,
+      'PAYMENT_REQUESTED' => CheckoutPaymentStatus.paymentRequested,
+      'FAILED' => CheckoutPaymentStatus.failed,
+      'EXPIRED' => CheckoutPaymentStatus.expired,
+      'CANCELLED' => CheckoutPaymentStatus.cancelled,
+      _ => CheckoutPaymentStatus.pending,
+    };
+  }
+
+  bool get isFinal =>
+      this == CheckoutPaymentStatus.paid ||
+      this == CheckoutPaymentStatus.failed ||
+      this == CheckoutPaymentStatus.expired ||
+      this == CheckoutPaymentStatus.cancelled;
+
+  bool get isPaid => this == CheckoutPaymentStatus.paid;
+}
+
 class CheckoutResult {
   const CheckoutResult({
     required this.transidmerchant,
@@ -6,6 +35,9 @@ class CheckoutResult {
     required this.adminFee,
     required this.grandTotal,
     required this.paymentOptions,
+    this.paymentStatus = CheckoutPaymentStatus.pending,
+    this.callbackReceived = false,
+    this.paidAt,
   });
 
   final String transidmerchant;
@@ -14,6 +46,9 @@ class CheckoutResult {
   final int adminFee;
   final int grandTotal;
   final List<PaymentOption> paymentOptions;
+  final CheckoutPaymentStatus paymentStatus;
+  final bool callbackReceived;
+  final String? paidAt;
 }
 
 class PaymentOption {
@@ -48,6 +83,9 @@ class PaymentAttempt {
     this.paymentUrl,
     this.paymentCode,
     this.expiredAt,
+    this.paymentStatus = CheckoutPaymentStatus.pending,
+    this.callbackReceived = false,
+    this.paidAt,
   });
 
   final String method;
@@ -60,4 +98,27 @@ class PaymentAttempt {
   final String? paymentUrl;
   final String? paymentCode;
   final DateTime? expiredAt;
+  final CheckoutPaymentStatus paymentStatus;
+  final bool callbackReceived;
+  final String? paidAt;
+
+  PaymentAttempt copyWithStatus({
+    CheckoutPaymentStatus? paymentStatus,
+    bool? callbackReceived,
+    String? paidAt,
+  }) => PaymentAttempt(
+    method: method,
+    channel: channel,
+    subtotal: subtotal,
+    adminFee: adminFee,
+    grandTotal: grandTotal,
+    virtualAccountNo: virtualAccountNo,
+    qrString: qrString,
+    paymentUrl: paymentUrl,
+    paymentCode: paymentCode,
+    expiredAt: expiredAt,
+    paymentStatus: paymentStatus ?? this.paymentStatus,
+    callbackReceived: callbackReceived ?? this.callbackReceived,
+    paidAt: paidAt ?? this.paidAt,
+  );
 }

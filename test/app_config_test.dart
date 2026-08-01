@@ -6,7 +6,7 @@ void main() {
     expect(AppConfig.environment.name, 'development');
   });
 
-  test('default LAN API host is centralized', () {
-    expect(AppConfig.apiBaseUrl, 'http://192.168.1.71:8081');
+  test('default staging API host is centralized', () {
+    expect(AppConfig.apiBaseUrl, 'https://dev.stela.id');
   });
 }

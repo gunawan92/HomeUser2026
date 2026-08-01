@@ -13,9 +13,16 @@ class CartRepository {
     required String parentReference,
     required List<PaymentItem> items,
   }) async {
+    final normalizedParentReference = parentReference.trim();
+    if (normalizedParentReference.isEmpty) {
+      throw const CartContractException(
+        'Sesi tidak memiliki parent_reference yang valid.',
+      );
+    }
     final cartResponse = await _apiClient.dio.post<Object>(
       '/api/v1/carts',
-      data: {'parent_reference': parentReference},
+      data: {'parent_reference': normalizedParentReference},
+      options: Options(contentType: Headers.jsonContentType),
     );
     final cart = _map(cartResponse.data, 'POST /api/v1/carts');
     final cartReference = _requiredText(cart, 'cart_reference');
@@ -23,14 +30,16 @@ class CartRepository {
       await _apiClient.dio.post<Object>(
         '/api/v1/carts/$cartReference/items',
         data: {
-          'parent_reference': parentReference,
+          'parent_reference': normalizedParentReference,
           'student_reference': item.serial,
           'source_reference': item.referenceTambahan!,
         },
+        options: Options(contentType: Headers.jsonContentType),
       );
     }
     final summaryResponse = await _apiClient.dio.get<Object>(
       '/api/v1/carts/$cartReference/summary',
+      queryParameters: {'parent_reference': normalizedParentReference},
     );
     final summary = _map(
       summaryResponse.data,
@@ -44,15 +53,30 @@ class CartRepository {
     );
   }
 
-  Future<CheckoutResult> checkoutCart({required String cartReference}) async {
+  Future<CheckoutResult> checkoutCart({
+    required String cartReference,
+    required String parentReference,
+  }) async {
+    final normalizedParentReference = parentReference.trim();
+    if (normalizedParentReference.isEmpty) {
+      throw const CartContractException(
+        'Sesi tidak memiliki parent_reference yang valid.',
+      );
+    }
     final checkoutResponse = await _apiClient.dio.post<Object>(
       '/api/v1/carts/$cartReference/checkout',
+      data: {'parent_reference': normalizedParentReference},
+      options: Options(contentType: Headers.jsonContentType),
     );
     final checkout = _map(
       checkoutResponse.data,
       'POST /api/v1/carts/{cart_reference}/checkout',
     );
     final transidmerchant = _requiredText(checkout, 'transidmerchant');
+    return getCheckoutSummary(transidmerchant);
+  }
+
+  Future<CheckoutResult> getCheckoutSummary(String transidmerchant) async {
     final summaryResponse = await _apiClient.dio.get<Object>(
       '/api/v1/checkouts/$transidmerchant/summary',
     );
@@ -80,6 +104,19 @@ class CartRepository {
         })
         .toList(growable: false);
     final amounts = _requiredMap(summary, 'amounts');
+
+    final paymentMap = summary['payment'] is Map
+        ? (summary['payment'] as Map).map((k, v) => MapEntry(k.toString(), v))
+        : null;
+    final latestAttemptMap = summary['latest_attempt'] is Map
+        ? (summary['latest_attempt'] as Map).map((k, v) => MapEntry(k.toString(), v))
+        : null;
+    final statusString = _optionalText(paymentMap ?? {}, 'status') ??
+        _optionalText(latestAttemptMap ?? {}, 'status');
+    final paymentStatus = CheckoutPaymentStatus.parse(statusString);
+    final callbackReceived = paymentMap?['callback_received'] == true;
+    final paidAt = _optionalText(paymentMap ?? {}, 'paid_at');
+
     return CheckoutResult(
       transidmerchant: transidmerchant,
       transidstela: transidstela,
@@ -87,6 +124,9 @@ class CartRepository {
       adminFee: _requiredAmount(amounts, 'admin_fee'),
       grandTotal: _requiredAmount(amounts, 'grand_total'),
       paymentOptions: _requiredPaymentOptions(summary),
+      paymentStatus: paymentStatus,
+      callbackReceived: callbackReceived,
+      paidAt: paidAt,
     );
   }
 
@@ -95,9 +135,29 @@ class CartRepository {
     required PaymentOption option,
   }) async {
     try {
+      final liveCheckout = await getCheckoutSummary(transidmerchant);
+      final liveOption = liveCheckout.paymentOptions
+          .where(
+            (candidate) =>
+                candidate.method == option.method &&
+                candidate.channel == option.channel,
+          )
+          .firstOrNull;
+      if (liveOption == null) {
+        throw const CartContractException(
+          'Metode pembayaran yang dipilih tidak lagi tersedia. Pilih ulang metodenya.',
+        );
+      }
+      if (!liveOption.enabled) {
+        throw CartContractException(
+          liveOption.disabledReason ??
+              'Metode pembayaran yang dipilih sedang tidak tersedia.',
+        );
+      }
       final response = await _apiClient.dio.post<Object>(
         '/api/v1/checkouts/$transidmerchant/payment',
-        data: {'method': option.method, 'channel': option.channel},
+        data: {'method': liveOption.method, 'channel': liveOption.channel},
+        options: Options(contentType: Headers.jsonContentType),
       );
       final result = _map(
         response.data,
@@ -107,8 +167,8 @@ class CartRepository {
       return PaymentAttempt(
         // Kontrak menjamin method/channel pada request, tetapi tidak
         // mewajibkan keduanya diulang di respons payment.
-        method: option.method,
-        channel: option.channel,
+        method: liveOption.method,
+        channel: liveOption.channel,
         subtotal: _requiredAmount(amounts, 'subtotal'),
         adminFee: _requiredAmount(amounts, 'admin_fee'),
         grandTotal: _requiredAmount(amounts, 'grand_total'),
@@ -130,8 +190,33 @@ class CartRepository {
     }
     final data = error.response?.data;
     if (data is Map) {
-      final message = data['message']?.toString().trim();
+      final payloadError = data['error'];
+      if (payloadError is Map) {
+        final detail = payloadError.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final code = detail['code']?.toString().trim();
+        final message = detail['message']?.toString().trim();
+        final providerMessage = detail['provider_response_message']
+            ?.toString()
+            .trim();
+        if (code == 'payment_option_not_available') {
+          return 'Metode pembayaran yang dipilih sedang tidak tersedia. '
+              'Silakan pilih metode lain.';
+        }
+        if (providerMessage != null && providerMessage.isNotEmpty) {
+          return providerMessage;
+        }
+        if (message != null && message.isNotEmpty) return message;
+        if (code != null && code.isNotEmpty) {
+          return 'Permintaan pembayaran ditolak: $code.';
+        }
+      }
+      final message = (data['message'] ?? data['errors'])?.toString().trim();
       if (message != null && message.isNotEmpty) return message;
+    }
+    if (error.response?.statusCode == 400) {
+      return 'Data metode pembayaran ditolak oleh server.';
     }
     return 'Pembayaran belum dapat dibuat. Periksa koneksi lalu coba lagi.';
   }

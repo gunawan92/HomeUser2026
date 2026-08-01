@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,6 +38,27 @@ class _CheckoutInvoicePageState extends ConsumerState<CheckoutInvoicePage> {
       (option) => option.enabled,
       orElse: () => widget.checkout.paymentOptions.first,
     );
+    if (kDebugMode) {
+      debugPrint(
+        '========== [CHECKOUT INVOICE PAGE DATA FROM BE] ==========\n'
+        'TransIDMerchant: ${widget.checkout.transidmerchant}\n'
+        'TransIDStela: ${widget.checkout.transidstela}\n'
+        'Subtotal: ${widget.checkout.subtotal}\n'
+        'Admin Fee: ${widget.checkout.adminFee}\n'
+        'Grand Total: ${widget.checkout.grandTotal}\n'
+        'Payment Options (${widget.checkout.paymentOptions.length}):\n'
+        '${_prettyJson(widget.checkout.paymentOptions.map((o) => {
+              "method": o.method,
+              "channel": o.channel,
+              "label": o.label,
+              "admin_fee": o.adminFee,
+              "grand_total": o.grandTotal,
+              "enabled": o.enabled,
+              "disabled_reason": o.disabledReason,
+            }).toList())}\n'
+        '===========================================================',
+      );
+    }
   }
 
   @override
@@ -122,12 +145,33 @@ class _CheckoutInvoicePageState extends ConsumerState<CheckoutInvoicePage> {
   }
 
   Future<void> _pay() async {
+    if (kDebugMode) {
+      debugPrint(
+        '========== [PAYMENT SUBMITTED TO BE] ==========\n'
+        'TransIDMerchant: ${widget.checkout.transidmerchant}\n'
+        'Selected Method: ${_selected.method}\n'
+        'Selected Channel: ${_selected.channel}\n'
+        'Payload JSON to POST /api/v1/checkouts/${widget.checkout.transidmerchant}/payment:\n'
+        '${_prettyJson({
+              "method": _selected.method,
+              "channel": _selected.channel,
+            })}\n'
+        '===============================================',
+      );
+    }
     final success = await ref
         .read(paymentControllerProvider.notifier)
         .createPayment(_selected);
     if (!mounted) return;
     final state = ref.read(paymentControllerProvider);
     if (!success || state.paymentAttempt == null) {
+      if (kDebugMode) {
+        debugPrint(
+          '========== [PAYMENT FAILED / RESPONSE ERROR] ==========\n'
+          'Error Message: ${state.cartErrorMessage}\n'
+          '=======================================================',
+        );
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(state.cartErrorMessage ?? 'Pembayaran gagal dibuat.'),
@@ -135,11 +179,34 @@ class _CheckoutInvoicePageState extends ConsumerState<CheckoutInvoicePage> {
       );
       return;
     }
+    final attempt = state.paymentAttempt!;
+    if (kDebugMode) {
+      debugPrint(
+        '========== [PAYMENT RESPONSE SUCCESS FROM BE] ==========\n'
+        'Method: ${attempt.method}\n'
+        'Channel: ${attempt.channel}\n'
+        'Virtual Account No: ${attempt.virtualAccountNo}\n'
+        'QR String: ${attempt.qrString}\n'
+        'Payment URL: ${attempt.paymentUrl}\n'
+        'Payment Code: ${attempt.paymentCode}\n'
+        'Expired At: ${attempt.expiredAt}\n'
+        'Amounts: Subtotal=${attempt.subtotal}, AdminFee=${attempt.adminFee}, GrandTotal=${attempt.grandTotal}\n'
+        '========================================================',
+      );
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PaymentInstructionPage(attempt: state.paymentAttempt!),
+        builder: (_) => PaymentInstructionPage(attempt: attempt),
       ),
     );
+  }
+
+  static String _prettyJson(Object? object) {
+    try {
+      return const JsonEncoder.withIndent('  ').convert(object);
+    } catch (_) {
+      return object.toString();
+    }
   }
 }
 
