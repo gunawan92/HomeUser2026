@@ -7,6 +7,6 @@ void main() {
   });
 
   test('default staging API host is centralized', () {
-    expect(AppConfig.apiBaseUrl, 'https://dev.stela.id');
+    expect(AppConfig.apiBaseUrl, 'https://devhu.stela.id');
   });
 }

@@ -7,7 +7,7 @@ abstract final class AppConfig {
   );
   static const apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://dev.stela.id',
+    defaultValue: 'https://devhu.stela.id',
   );
   static AppEnvironment get environment =>
       AppEnvironmentX.fromValue(_environmentValue);

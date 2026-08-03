@@ -90,19 +90,42 @@ class CartRepository {
         'Respons checkout tidak memiliki daftar `transactions`.',
       );
     }
-    final transidstela = transactions
+    final transidstela = <String>[];
+    final transactionItems = transactions
         .map((transaction) {
           if (transaction is! Map) {
             throw const CartContractException(
               'Item `transactions` tidak valid.',
             );
           }
-          return _requiredText(
-            transaction.map((key, value) => MapEntry(key.toString(), value)),
-            'transidstela',
+          final tx = transaction.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+          final idstela = _requiredText(tx, 'transidstela');
+          transidstela.add(idstela);
+          final studentRef = _optionalText(tx, 'student_reference') ??
+              _optionalText(tx, 'student_serial') ??
+              '';
+          final studentSer = _optionalText(tx, 'student_serial') ??
+              _optionalText(tx, 'student_reference') ??
+              '';
+          return CheckoutTransactionItem(
+            transidstela: idstela,
+            studentReference: studentRef,
+            studentSerial: studentSer,
+            studentName: _optionalText(tx, 'student_name'),
+            schoolName: _optionalText(tx, 'school_name'),
+            idschool: _optionalText(tx, 'idschool'),
+            idclass: _optionalText(tx, 'idclass'),
+            className: _optionalText(tx, 'class_name'),
+            periode: _optionalText(tx, 'periode'),
+            description: _optionalText(tx, 'description') ?? 'Tagihan',
+            amount: _requiredAmount(tx, 'amount'),
+            status: _optionalText(tx, 'status') ?? 'CREATED',
           );
         })
         .toList(growable: false);
+
     final amounts = _requiredMap(summary, 'amounts');
 
     final paymentMap = summary['payment'] is Map
@@ -124,6 +147,7 @@ class CartRepository {
       adminFee: _requiredAmount(amounts, 'admin_fee'),
       grandTotal: _requiredAmount(amounts, 'grand_total'),
       paymentOptions: _requiredPaymentOptions(summary),
+      transactions: transactionItems,
       paymentStatus: paymentStatus,
       callbackReceived: callbackReceived,
       paidAt: paidAt,

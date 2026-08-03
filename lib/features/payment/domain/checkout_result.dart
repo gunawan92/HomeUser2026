@@ -27,6 +27,36 @@ enum CheckoutPaymentStatus {
   bool get isPaid => this == CheckoutPaymentStatus.paid;
 }
 
+class CheckoutTransactionItem {
+  const CheckoutTransactionItem({
+    required this.transidstela,
+    required this.studentReference,
+    required this.studentSerial,
+    this.studentName,
+    this.schoolName,
+    this.idschool,
+    this.idclass,
+    this.className,
+    this.periode,
+    required this.description,
+    required this.amount,
+    required this.status,
+  });
+
+  final String transidstela;
+  final String studentReference;
+  final String studentSerial;
+  final String? studentName;
+  final String? schoolName;
+  final String? idschool;
+  final String? idclass;
+  final String? className;
+  final String? periode;
+  final String description;
+  final int amount;
+  final String status;
+}
+
 class CheckoutResult {
   const CheckoutResult({
     required this.transidmerchant,
@@ -35,6 +65,7 @@ class CheckoutResult {
     required this.adminFee,
     required this.grandTotal,
     required this.paymentOptions,
+    this.transactions = const [],
     this.paymentStatus = CheckoutPaymentStatus.pending,
     this.callbackReceived = false,
     this.paidAt,
@@ -46,6 +77,7 @@ class CheckoutResult {
   final int adminFee;
   final int grandTotal;
   final List<PaymentOption> paymentOptions;
+  final List<CheckoutTransactionItem> transactions;
   final CheckoutPaymentStatus paymentStatus;
   final bool callbackReceived;
   final String? paidAt;

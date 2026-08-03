@@ -75,10 +75,12 @@ class _CheckoutInvoicePageState extends ConsumerState<CheckoutInvoicePage> {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                 children: [
                   _InvoiceCard(
+                    checkout: widget.checkout,
                     items: widget.items,
                     subtotal: widget.checkout.subtotal,
                     adminFee: _selected.adminFee,
                     grandTotal: _selected.grandTotal,
+                    childrenProfiles: state.children,
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -212,15 +214,19 @@ class _CheckoutInvoicePageState extends ConsumerState<CheckoutInvoicePage> {
 
 class _InvoiceCard extends StatelessWidget {
   const _InvoiceCard({
+    required this.checkout,
     required this.items,
     required this.subtotal,
     required this.adminFee,
     required this.grandTotal,
+    required this.childrenProfiles,
   });
+  final CheckoutResult checkout;
   final List<PaymentItem> items;
   final int subtotal;
   final int adminFee;
   final int grandTotal;
+  final List<ChildPaymentProfile> childrenProfiles;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
@@ -241,16 +247,29 @@ class _InvoiceCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
-                const Text('yang akan dibayarkan'),
+                Text(
+                  'Invoice: ${checkout.transidmerchant}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black54,
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 18),
-          for (final item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _InvoiceItem(item: item),
-            ),
+          if (checkout.transactions.isNotEmpty)
+            for (final tx in checkout.transactions) ...[
+              _buildTransactionCard(tx),
+              const SizedBox(height: 8),
+            ]
+          else
+            for (final item in items)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _InvoiceItem(item: item),
+              ),
           const Divider(height: 30),
           _AmountLine(label: 'Sub Total', amount: subtotal),
           const SizedBox(height: 8),
@@ -261,6 +280,91 @@ class _InvoiceCard extends StatelessWidget {
       ),
     ),
   );
+
+  Widget _buildTransactionCard(CheckoutTransactionItem tx) {
+    final matchedChild = childrenProfiles.firstWhere(
+      (c) => c.serial == tx.studentReference || c.serial == tx.studentSerial,
+      orElse: () => ChildPaymentProfile(
+        idschool: '',
+        serial: '',
+        name: '',
+        schoolName: '',
+        periodLabel: '',
+        periodReference: '',
+        className: '',
+        idclass: '',
+        items: const [],
+      ),
+    );
+
+    final studentName = tx.studentName ??
+        (matchedChild.name.isNotEmpty ? matchedChild.name : tx.studentSerial);
+    final schoolName = tx.schoolName ?? matchedChild.schoolName;
+    final className = tx.className ?? matchedChild.className;
+
+    final subtitleParts = <String>[];
+    if (schoolName.isNotEmpty) subtitleParts.add(schoolName);
+    if (className.isNotEmpty) subtitleParts.add(className);
+    final subtitle = subtitleParts.join(' - ');
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE0E0E0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            studentName,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: Colors.black87,
+            ),
+          ),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+                color: Colors.black54,
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                tx.description,
+                style: const TextStyle(fontSize: 13, color: Colors.black87),
+              ),
+              Text(
+                CurrencyFormatter.rupiah(tx.amount),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: StelaColors.primaryRed,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _InvoiceItem extends StatelessWidget {

@@ -330,6 +330,7 @@ class PaymentController extends Notifier<PaymentState> {
               adminFee: summary.adminFee,
               grandTotal: summary.grandTotal,
               paymentOptions: summary.paymentOptions,
+              transactions: summary.transactions,
               paymentStatus: newStatus,
               callbackReceived: summary.callbackReceived,
               paidAt: summary.paidAt,
